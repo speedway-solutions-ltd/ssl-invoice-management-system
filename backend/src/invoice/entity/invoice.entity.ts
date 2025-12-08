@@ -13,7 +13,13 @@ export class Invoice {
   @Column({ type: 'numeric', nullable: true })
   subtotal: number;
   @Column({ type: 'numeric', nullable: true })
+  tax_percent: number;
+  @Column({ type: 'numeric', nullable: true })
   tax: number;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  discount_type: string;
+  @Column({ type: 'numeric', nullable: true })
+  discount_value: number;
   @Column({ type: 'numeric', nullable: true })
   other: number;
   @Column({ type: 'numeric', nullable: true })

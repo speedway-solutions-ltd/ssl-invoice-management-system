@@ -14,6 +14,9 @@ export default function InvoiceForm({ id }: { id?: string }) {
     tax: 0,
     other: 0,
     total: 0,
+    tax_percent: 0,
+    discount_type: 'percent',
+    discount_value: 0,
     notes: '',
     items: [],
   });
@@ -41,6 +44,12 @@ export default function InvoiceForm({ id }: { id?: string }) {
   function updateItem(idx: number, field: string, value: any) {
     const items = [...invoice.items];
     items[idx] = { ...items[idx], [field]: value };
+    // auto compute line total when qty or unit_price change
+    const qty = Number(items[idx].qty || 0);
+    const unit = Number(items[idx].unit_price || 0);
+    if (field === 'qty' || field === 'unit_price') {
+      items[idx].total = Number((qty * unit).toFixed(2));
+    }
     setInvoice((prev: any) => ({ ...prev, items }));
   }
 
@@ -65,6 +74,28 @@ export default function InvoiceForm({ id }: { id?: string }) {
       setLoading(false);
     }
   }
+
+  // Recompute invoice totals whenever items, discount, tax_percent or other change
+  useEffect(() => {
+    const items = invoice.items || [];
+    const subtotal = items.reduce((s: number, it: any) => s + Number(it.total || 0), 0);
+    const discountValue = Number(invoice.discount_value || 0);
+    const discountType = invoice.discount_type || 'percent';
+    const discountAmount = discountType === 'percent' ? (subtotal * (discountValue / 100)) : discountValue;
+    const taxableBase = Math.max(0, subtotal - discountAmount);
+    const taxPercent = Number(invoice.tax_percent || 0);
+    const taxAmount = Number(((taxableBase * taxPercent) / 100).toFixed(2));
+    const other = Number(invoice.other || 0);
+    const total = Number((taxableBase + taxAmount + other).toFixed(2));
+    // update only if changed to avoid re-render loop
+    setInvoice((prev: any) => {
+      const changed = prev.subtotal !== subtotal || Number(prev.tax) !== taxAmount || Number(prev.total) !== total;
+      if (changed) {
+        return { ...prev, subtotal, tax: taxAmount, total };
+      }
+      return prev;
+    });
+  }, [invoice.items, invoice.discount_value, invoice.discount_type, invoice.tax_percent, invoice.other]);
 
   return (
     <form onSubmit={submit} className={styles.formContainer}>
@@ -169,14 +200,7 @@ export default function InvoiceForm({ id }: { id?: string }) {
                     />
                   </td>
                   <td className={styles.itemsTableCell}>
-                    <input
-                      type="number"
-                      className={styles.itemInput}
-                      value={item.total || 0}
-                      onChange={(e) => updateItem(idx, 'total', Number(e.target.value))}
-                      step="0.01"
-                      min="0"
-                    />
+                    <div style={{ fontWeight: 600 }}>${Number(item.total || 0).toFixed(2)}</div>
                   </td>
                   <td className={styles.itemsTableCell}>
                     <button
@@ -213,14 +237,18 @@ export default function InvoiceForm({ id }: { id?: string }) {
 
         <div className={styles.formGroup}>
           <label className={styles.formLabel}>Tax</label>
-          <input
-            type="number"
-            className={styles.formInput}
-            value={invoice.tax || 0}
-            onChange={(e) => setField('tax', Number(e.target.value))}
-            step="0.01"
-            min="0"
-          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="number"
+              className={styles.formInput}
+              value={invoice.tax_percent || 0}
+              onChange={(e) => setField('tax_percent', Number(e.target.value))}
+              step="0.01"
+              min="0"
+              placeholder="Tax %"
+            />
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--slate-600)' }}>${Number(invoice.tax || 0).toFixed(2)}</div>
+          </div>
         </div>
 
         <div className={styles.formGroup}>
@@ -241,10 +269,22 @@ export default function InvoiceForm({ id }: { id?: string }) {
             type="number"
             className={styles.formInput}
             value={invoice.total || 0}
-            onChange={(e) => setField('total', Number(e.target.value))}
+            readOnly
             step="0.01"
             min="0"
           />
+        </div>
+      </div>
+
+      {/* Discount Section */}
+      <div style={{ marginTop: 12, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label className={styles.formLabel}>Discount</label>
+          <select value={invoice.discount_type || 'percent'} onChange={(e) => setField('discount_type', e.target.value)}>
+            <option value="percent">Percent (%)</option>
+            <option value="fixed">Fixed ($)</option>
+          </select>
+          <input type="number" className={styles.formInput} value={invoice.discount_value || 0} onChange={(e) => setField('discount_value', Number(e.target.value))} step="0.01" min="0" />
         </div>
       </div>
 

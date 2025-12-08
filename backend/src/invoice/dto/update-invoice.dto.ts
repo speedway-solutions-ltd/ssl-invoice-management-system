@@ -23,10 +23,25 @@ export class UpdateInvoiceDto {
   @IsNumber()
   subtotal?: number;
 
+  @ApiPropertyOptional({ description: 'Tax percent to apply to taxable base' })
+  @IsOptional()
+  @IsNumber()
+  tax_percent?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   tax?: number;
+
+  @ApiPropertyOptional({ description: 'Discount type: percent or fixed' })
+  @IsOptional()
+  @IsString()
+  discount_type?: string;
+
+  @ApiPropertyOptional({ description: 'Discount value (percent or fixed amount depending on discount_type)' })
+  @IsOptional()
+  @IsNumber()
+  discount_value?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

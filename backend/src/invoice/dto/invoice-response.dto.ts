@@ -17,8 +17,17 @@ export class InvoiceResponseDto {
   @ApiPropertyOptional()
   subtotal?: number;
 
+  @ApiPropertyOptional({ description: 'Tax percent applied' })
+  tax_percent?: number;
+
   @ApiPropertyOptional()
   tax?: number;
+
+  @ApiPropertyOptional({ description: 'Discount type: percent | fixed' })
+  discount_type?: string;
+
+  @ApiPropertyOptional({ description: 'Discount value (percent or fixed amount depending on discount_type)' })
+  discount_value?: number;
 
   @ApiPropertyOptional()
   other?: number;
