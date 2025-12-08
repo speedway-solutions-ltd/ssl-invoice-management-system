@@ -119,34 +119,53 @@ export class InvoiceService {
       const colTotalW = 80;
       const colDescW = tableRight - tableLeft - (colItemW + colQtyW + colUnitW + colTotalW) - 12;
 
-      // Header background
-      doc.rect(tableLeft, tableTopY - 6, tableRight - tableLeft, 22).fill('#f2a6a6');
-      doc.fillColor('#000').fontSize(9).text('ITEM #', tableLeft + 6, tableTopY);
-      doc.text('DESCRIPTION', tableLeft + colItemW + 12, tableTopY);
-      doc.text('QTY', tableLeft + colItemW + 12 + colDescW + 6, tableTopY);
-      doc.text('UNIT PRICE', tableLeft + colItemW + 12 + colDescW + 6 + colQtyW + 6, tableTopY);
-      doc.text('TOTAL', tableRight - colTotalW + 6, tableTopY);
-
-      // Draw rows and auto-paginate
-      const rowHeight = 20;
-      let y = tableTopY + 26;
+      // Draw table header and rows with auto-height per item (wrap descriptions)
+      const headerHeight = 22;
+      const headerGap = 4;
+      const minRowHeight = 20;
       const items = Array.isArray(inv.items) ? inv.items : [];
 
-      const ensureNewPage = (rowNeeded = 1) => {
-        if (y + rowHeight * rowNeeded > pageHeight - 120) {
+      const drawTableHeader = (atY: number) => {
+        // header background
+        doc.rect(tableLeft, atY - 6, tableRight - tableLeft, headerHeight).fill('#f2a6a6');
+        doc.fillColor('#000').fontSize(9).text('ITEM #', tableLeft + 6, atY);
+        doc.text('DESCRIPTION', tableLeft + colItemW + 12, atY);
+        doc.text('QTY', tableLeft + colItemW + 12 + colDescW + 6, atY);
+        doc.text('UNIT PRICE', tableLeft + colItemW + 12 + colDescW + 6 + colQtyW + 6, atY);
+        doc.text('TOTAL', tableRight - colTotalW + 6, atY);
+        return atY + headerHeight + headerGap;
+      };
+
+      let y = drawTableHeader(tableTopY);
+
+      const ensureNewPage = (spaceNeeded = minRowHeight) => {
+        if (y + spaceNeeded > pageHeight - 120) {
           doc.addPage();
-          y = 60;
+          // after adding a page, re-draw header at top
+          y = drawTableHeader(60);
         }
       };
 
       if (items.length === 0) {
-        ensureNewPage();
-        doc.rect(tableLeft, y - 4, tableRight - tableLeft, rowHeight).stroke('#e0e0e0');
+        ensureNewPage(minRowHeight);
+        doc.rect(tableLeft, y - 4, tableRight - tableLeft, minRowHeight).stroke('#e0e0e0');
         doc.fontSize(9).fillColor('#666').text('No items', tableLeft + 6, y);
-        y += rowHeight;
+        y += minRowHeight;
       } else {
         for (const it of items) {
-          ensureNewPage();
+          // measure description height for wrapping
+          const desc = (it.description || '-').toString();
+          const descHeight = doc.heightOfString(desc, { width: colDescW - 6, align: 'left' });
+          const itemCodeHeight = doc.heightOfString((it.item_code || '-').toString(), { width: colItemW - 10 });
+          const qtyHeight = doc.heightOfString(String(it.qty ?? '-'), { width: colQtyW });
+          const unitHeight = doc.heightOfString(fmt(it.unit_price), { width: colUnitW });
+          const totalHeight = doc.heightOfString(fmt(it.total), { width: colTotalW - 10 });
+
+          const contentHeight = Math.max(descHeight, itemCodeHeight, qtyHeight, unitHeight, totalHeight);
+          const rowHeight = Math.max(minRowHeight, contentHeight + 6);
+
+          ensureNewPage(rowHeight + 4);
+
           // light row border
           doc.lineWidth(0.3).strokeColor('#e6e6e6').rect(tableLeft, y - 4, tableRight - tableLeft, rowHeight).stroke();
 
@@ -155,7 +174,7 @@ export class InvoiceService {
 
           // description (allow wrap)
           const descX = tableLeft + colItemW + 12;
-          doc.fontSize(9).fillColor('#000').text(it.description ?? '-', descX, y, { width: colDescW - 6 });
+          doc.fontSize(9).fillColor('#000').text(desc, descX, y, { width: colDescW - 6 });
 
           // qty centered
           const qtyX = descX + colDescW + 6;
@@ -168,6 +187,7 @@ export class InvoiceService {
           // total right aligned
           doc.text(fmt(it.total), tableRight - colTotalW + 6, y, { width: colTotalW - 10, align: 'right' });
 
+          // advance y by rowHeight
           y += rowHeight;
         }
       }
@@ -179,9 +199,13 @@ export class InvoiceService {
       doc.fontSize(9).fillColor('#666').text('Comments / Special Instructions', left + 6, commentsY + 6);
       doc.fontSize(9).fillColor('#000').text(inv.notes ?? '-', left + 6, commentsY + 22, { width: leftBlockWidth - 12 });
 
-      // Totals box
-      const totalsX = right - 200;
+      // Totals box (use consistent width and right-aligned value area)
+      const totalsBoxWidth = 220;
+      const totalsX = right - totalsBoxWidth;
       const totalsY = commentsY;
+      const totalsInnerPadding = 8;
+      const totalsValueWidth = totalsBoxWidth - totalsInnerPadding * 2;
+
       // compute totals with discount and tax
       const computedSubtotal = items.reduce((s: number, it: any) => s + (Number(it.total) || 0), 0);
       const subtotal = inv.subtotal !== undefined && inv.subtotal !== null ? Number(inv.subtotal) : computedSubtotal;
@@ -202,33 +226,46 @@ export class InvoiceService {
       const other = inv.other !== undefined && inv.other !== null ? Number(inv.other) : 0;
       const total = inv.total !== undefined && inv.total !== null ? Number(inv.total) : Number((taxableBase + taxAmount + other).toFixed(2));
 
-      const labelX = totalsX;
-      const valueX = right - 10;
+      const labelX = totalsX + totalsInnerPadding;
+      const valueBoxX = labelX;
 
-      doc.fontSize(10).fillColor('#000').text('SUBTOTAL', labelX, totalsY);
-      doc.text(fmt(subtotal), valueX - 60, totalsY, { align: 'right' });
+      const lineHeight = 16;
+      let lineY = totalsY;
+
+      // draw a subtle background/border for totals area (optional)
+      doc.lineWidth(0.5).strokeColor('#e6e6e6').rect(totalsX, totalsY - 6, totalsBoxWidth, 120).stroke();
+
+      // SUBTOTAL
+      doc.fontSize(10).fillColor('#000').text('SUBTOTAL', labelX, lineY, { width: totalsValueWidth });
+      doc.text(fmt(subtotal), valueBoxX, lineY, { width: totalsValueWidth, align: 'right' });
+      lineY += lineHeight;
 
       // Discount line (show percent or fixed)
       if (discountAmount && discountAmount > 0) {
         const discLabel = discountType === 'percent' ? `DISCOUNT (${discountValue}%)` : 'DISCOUNT';
-        doc.text(discLabel, labelX, totalsY + 16);
-        doc.text(`-${fmt(discountAmount)}`, valueX - 60, totalsY + 16, { align: 'right' });
+        doc.text(discLabel, labelX, lineY, { width: totalsValueWidth });
+        doc.text(`-${fmt(discountAmount)}`, valueBoxX, lineY, { width: totalsValueWidth, align: 'right' });
+        lineY += lineHeight;
       }
 
       // Tax line shows percent and computed amount
       const taxLabel = taxPercent ? `TAX (${taxPercent}%)` : 'TAX';
-      doc.text(taxLabel, labelX, totalsY + 32);
-      doc.text(taxAmount ? fmt(taxAmount) : '-', valueX - 60, totalsY + 32, { align: 'right' });
+      doc.text(taxLabel, labelX, lineY, { width: totalsValueWidth });
+      doc.text(taxAmount ? fmt(taxAmount) : '-', valueBoxX, lineY, { width: totalsValueWidth, align: 'right' });
+      lineY += lineHeight;
 
-      doc.text('OTHER', labelX, totalsY + 48);
-      doc.text(other ? fmt(other) : '-', valueX - 60, totalsY + 48, { align: 'right' });
+      // Other
+      doc.text('OTHER', labelX, lineY, { width: totalsValueWidth });
+      doc.text(other ? fmt(other) : '-', valueBoxX, lineY, { width: totalsValueWidth, align: 'right' });
+      lineY += lineHeight + 6;
 
       // Total highlighted area
+      const totalBoxHeight = 36;
       doc.save();
-      doc.rect(labelX - 6, totalsY + 72, 200, 32).fill('#f8dcdc');
+      doc.rect(totalsX + totalsInnerPadding - 6, lineY - 2, totalsBoxWidth - (totalsInnerPadding - 6) - totalsInnerPadding, totalBoxHeight);  //.fill('#dcdcdc');
       doc.restore();
-      doc.fontSize(12).fillColor('#000').text('TOTAL', labelX, totalsY + 80);
-      doc.text(fmt(total), valueX - 60, totalsY + 80, { align: 'right' });
+      doc.fontSize(12).fillColor('#000').text('TOTAL', labelX, lineY + 6, { width: totalsValueWidth });
+      doc.text(fmt(total), valueBoxX, lineY + 6, { width: totalsValueWidth, align: 'right' });
 
       // Footer line
       doc.fontSize(8).fillColor('#444').text(
