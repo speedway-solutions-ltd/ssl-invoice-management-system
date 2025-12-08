@@ -182,12 +182,25 @@ export class InvoiceService {
       // Totals box
       const totalsX = right - 200;
       const totalsY = commentsY;
-      // compute totals if missing
+      // compute totals with discount and tax
       const computedSubtotal = items.reduce((s: number, it: any) => s + (Number(it.total) || 0), 0);
       const subtotal = inv.subtotal !== undefined && inv.subtotal !== null ? Number(inv.subtotal) : computedSubtotal;
-      const tax = inv.tax !== undefined && inv.tax !== null ? Number(inv.tax) : 0;
+      const discountType = (inv.discount_type || 'percent').toString();
+      const discountValue = Number(inv.discount_value || 0);
+      let discountAmount = 0;
+      if (discountType === 'percent') {
+        discountAmount = Number((subtotal * (discountValue / 100)).toFixed(2));
+      } else {
+        discountAmount = Number(discountValue.toFixed ? discountValue.toFixed(2) : discountValue) || discountValue;
+      }
+
+      const taxableBase = Math.max(0, subtotal - discountAmount);
+
+      const taxPercent = Number(inv.tax_percent || 0);
+      const taxAmount = Number(((taxableBase * taxPercent) / 100).toFixed(2));
+
       const other = inv.other !== undefined && inv.other !== null ? Number(inv.other) : 0;
-      const total = inv.total !== undefined && inv.total !== null ? Number(inv.total) : subtotal + tax + other;
+      const total = inv.total !== undefined && inv.total !== null ? Number(inv.total) : Number((taxableBase + taxAmount + other).toFixed(2));
 
       const labelX = totalsX;
       const valueX = right - 10;
@@ -195,18 +208,27 @@ export class InvoiceService {
       doc.fontSize(10).fillColor('#000').text('SUBTOTAL', labelX, totalsY);
       doc.text(fmt(subtotal), valueX - 60, totalsY, { align: 'right' });
 
-      doc.text('TAX', labelX, totalsY + 16);
-      doc.text(tax ? fmt(tax) : '-', valueX - 60, totalsY + 16, { align: 'right' });
+      // Discount line (show percent or fixed)
+      if (discountAmount && discountAmount > 0) {
+        const discLabel = discountType === 'percent' ? `DISCOUNT (${discountValue}%)` : 'DISCOUNT';
+        doc.text(discLabel, labelX, totalsY + 16);
+        doc.text(`-${fmt(discountAmount)}`, valueX - 60, totalsY + 16, { align: 'right' });
+      }
 
-      doc.text('OTHER', labelX, totalsY + 32);
-      doc.text(other ? fmt(other) : '-', valueX - 60, totalsY + 32, { align: 'right' });
+      // Tax line shows percent and computed amount
+      const taxLabel = taxPercent ? `TAX (${taxPercent}%)` : 'TAX';
+      doc.text(taxLabel, labelX, totalsY + 32);
+      doc.text(taxAmount ? fmt(taxAmount) : '-', valueX - 60, totalsY + 32, { align: 'right' });
+
+      doc.text('OTHER', labelX, totalsY + 48);
+      doc.text(other ? fmt(other) : '-', valueX - 60, totalsY + 48, { align: 'right' });
 
       // Total highlighted area
       doc.save();
-      doc.rect(labelX - 6, totalsY + 52, 200, 28).fill('#f8dcdc');
+      doc.rect(labelX - 6, totalsY + 72, 200, 32).fill('#f8dcdc');
       doc.restore();
-      doc.fontSize(12).fillColor('#000').text('TOTAL', labelX, totalsY + 58);
-      doc.text(fmt(total), valueX - 60, totalsY + 58, { align: 'right' });
+      doc.fontSize(12).fillColor('#000').text('TOTAL', labelX, totalsY + 80);
+      doc.text(fmt(total), valueX - 60, totalsY + 80, { align: 'right' });
 
       // Footer line
       doc.fontSize(8).fillColor('#444').text(
