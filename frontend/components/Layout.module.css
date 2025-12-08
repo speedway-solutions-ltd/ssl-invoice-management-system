@@ -1,0 +1,19 @@
+/* Layout Styles */
+.layoutRoot {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--slate-50);
+}
+
+.layoutContent {
+  display: flex;
+  flex: 1;
+}
+
+.layoutMain {
+  padding: 24px;
+  flex: 1;
+  background-color: var(--slate-50);
+  overflow-y: auto;
+}

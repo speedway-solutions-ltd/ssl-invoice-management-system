@@ -1,0 +1,52 @@
+/* Sidebar Styles */
+.sidebar {
+  width: 240px;
+  background: linear-gradient(to bottom, var(--slate-900), var(--slate-800));
+  color: #cbd5e1;
+  height: calc(100vh - 60px);
+  padding: 20px 16px;
+  overflow-y: auto;
+  box-shadow: 1px 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.sidebarHeader {
+  margin-bottom: 24px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+}
+
+.navList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.navItem {
+  margin: 0;
+}
+
+.navItemLink {
+  display: block;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 200ms;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.navItemLink:hover {
+  background-color: rgba(100, 116, 139, 0.2);
+  color: #e2e8f0;
+}
+
+.navItemLink.active {
+  background-color: var(--blue-600);
+  color: #fff;
+}
