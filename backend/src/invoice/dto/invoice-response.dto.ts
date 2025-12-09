@@ -12,7 +12,13 @@ export class InvoiceResponseDto {
   date?: string;
 
   @ApiPropertyOptional()
-  bill_to?: string;
+  billing_to?: any;
+
+  @ApiPropertyOptional()
+  billing_from?: any;
+
+  @ApiPropertyOptional({ description: 'Invoice status (draft|sent|paid|cancelled)' })
+  status?: string;
 
   @ApiPropertyOptional()
   subtotal?: number;

@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsArray, IsString, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 import { InvoiceItemDto } from './invoice-item.dto';
 
 export class UpdateInvoiceDto {
@@ -13,10 +14,17 @@ export class UpdateInvoiceDto {
   @IsString()
   date?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Billing TO company id' })
   @IsOptional()
-  @IsString()
-  bill_to?: string;
+  @Type(() => Number)
+  @IsNumber()
+  billing_to_id?: number;
+
+  @ApiPropertyOptional({ description: 'Billing FROM company id' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  billing_from_id?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

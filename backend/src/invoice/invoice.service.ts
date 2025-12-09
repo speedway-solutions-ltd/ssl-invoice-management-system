@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from './entity/invoice.entity';
+import { Company } from '../company/company.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { Response } from 'express';
@@ -10,7 +11,8 @@ import * as PDFDocument from 'pdfkit';
 @Injectable()
 export class InvoiceService {
   constructor(
-    @InjectRepository(Invoice) private invoiceRepo: Repository<Invoice>
+    @InjectRepository(Invoice) private invoiceRepo: Repository<Invoice>,
+    @InjectRepository(Company) private companyRepo: Repository<Company>,
   ) { }
   private computeInvoiceTotals(inv: any) {
     const items = Array.isArray(inv.items) ? inv.items : [];
@@ -45,18 +47,36 @@ export class InvoiceService {
     inv.tax = taxAmount;
     inv.total = total;
   }
-  create(dto: CreateInvoiceDto) {
+  async create(dto: CreateInvoiceDto) {
+    console.log('dto:::', dto);
+
     const inv = this.invoiceRepo.create(dto as any);
+    // resolve and validate billing_from?.id / billing_to?.id in DTO and convert to relation refs
+    if ((dto as any).billing_from?.id) {
+      const from = await this.companyRepo.findOne({ where: { id: Number((dto as any).billing_from?.id) } });
+      if (!from) throw new BadRequestException('billing_from?.id not found');
+      if (from.type !== 'own') throw new BadRequestException('billing_from must be a company of type "own"');
+      (inv as any).billing_from = from as any;
+    }
+    if ((dto as any).billing_to?.id) {
+      const to = await this.companyRepo.findOne({ where: { id: Number((dto as any).billing_to?.id) } });
+      if (!to) throw new BadRequestException('billing_to?.id not found');
+      if (to.type !== 'client') throw new BadRequestException('billing_to must be a company of type "client"');
+      (inv as any).billing_to = to as any;
+    }
+    if ((inv as any).billing_from && (inv as any).billing_to && (inv as any).billing_from.id === (inv as any).billing_to.id) {
+      throw new BadRequestException('billing_from and billing_to must be different companies');
+    }
     this.computeInvoiceTotals(inv);
     return this.invoiceRepo.save(inv);
   }
 
   findAll() {
-    return this.invoiceRepo.find({ relations: ['items'], order: { id: 'DESC' } });
+    return this.invoiceRepo.find({ relations: ['items', 'billing_from', 'billing_to'], order: { id: 'DESC' } });
   }
 
   async findOne(id: number) {
-    const inv = await this.invoiceRepo.findOne({ where: { id }, relations: ['items'] });
+    const inv = await this.invoiceRepo.findOne({ where: { id }, relations: ['items', 'billing_from', 'billing_to'] });
     if (!inv) throw new NotFoundException('Invoice not found');
     return inv;
   }
@@ -64,6 +84,28 @@ export class InvoiceService {
   async update(id: number, dto: UpdateInvoiceDto) {
     const existing = await this.findOne(id);
     const merged = this.invoiceRepo.merge(existing as any, dto as any);
+
+    // resolve and validate billing ids to relation objects when provided
+    // Resolve billing companies and enforce types
+    if ((dto as any).billing_from?.id) {
+      const from = await this.companyRepo.findOne({ where: { id: Number((dto as any).billing_from?.id) } });
+      if (!from) throw new BadRequestException('billing_from?.id not found');
+      if (from.type !== 'own') throw new BadRequestException('billing_from must be a company of type "own"');
+      (merged as any).billing_from = from as any;
+    } else {
+      (merged as any).billing_from = null;
+    }
+    if ((dto as any).billing_to?.id) {
+      const to = await this.companyRepo.findOne({ where: { id: Number((dto as any).billing_to?.id) } });
+      if (!to) throw new BadRequestException('billing_to?.id not found');
+      if (to.type !== 'client') throw new BadRequestException('billing_to must be a company of type "client"');
+      (merged as any).billing_to = to as any;
+    } else {
+      (merged as any).billing_to = null;
+    }
+    if ((merged as any).billing_from && (merged as any).billing_to && (merged as any).billing_from.id === (merged as any).billing_to.id) {
+      throw new BadRequestException('billing_from and billing_to must be different companies');
+    }
     this.computeInvoiceTotals(merged);
     return this.invoiceRepo.save(merged as any);
   }
@@ -112,10 +154,16 @@ export class InvoiceService {
       const left = doc.page.margins.left;
       const right = pageWidth - doc.page.margins.right;
 
-      // --- Header (company left, invoice title right) ---
-      doc.fontSize(16).fillColor('#000').text('Speedway Solutions Ltd.', left, 40);
-      // Optional: add a small subtitle / address line
-      doc.fontSize(9).fillColor('#333').text('Blue Moon Gram Tower, 167/24, ECB Chattar, Dhaka Cantonment, Dhaka-1206', left, 60);
+      // --- Header (billing_from company left, invoice title right) ---
+      const from = inv.billing_from || null;
+      if (from) {
+        doc.fontSize(16).fillColor('#000').text(from.name || 'Billing From', left, 40);
+        if (from.address) doc.fontSize(9).fillColor('#333').text(from.address, left, 60);
+        if (from.phone) doc.fontSize(9).fillColor('#333').text(`Phone: ${from.phone}`, left, 76);
+      } else {
+        doc.fontSize(16).fillColor('#000').text('Speedway Solutions Ltd.', left, 40);
+        doc.fontSize(9).fillColor('#333').text('Blue Moon Gram Tower, 167/24, ECB Chattar, Dhaka Cantonment, Dhaka-1206', left, 60);
+      }
 
       // Invoice title box on the right
       const titleBoxWidth = 180;
@@ -131,17 +179,24 @@ export class InvoiceService {
       const rightBlockX = left + leftBlockWidth + 20;
       const rightBlockWidth = pageWidth - doc.page.margins.right - rightBlockX;
 
-      // Company block (left)
-      doc.fontSize(9).fillColor('#000').text('Speedway Solutions Ltd.', left, topBlockY);
-      doc.text('Phone: +880 1775 274090');
-      doc.text('Website: https://speedway-solutions.com/');
+      // Company block (left) - use billing_from when available, otherwise fallback
+      if (from) {
+        doc.fontSize(9).fillColor('#000').text(from.name || 'Speedway Solutions Ltd.', left, topBlockY);
+        if (from.address) doc.fontSize(9).fillColor('#333').text(from.address, left, topBlockY + 14);
+        if (from.phone) doc.fontSize(9).fillColor('#333').text(`Phone: ${from.phone}`);
+        if (from.website) doc.fontSize(9).fillColor('#333').text(`Website: ${from.website}`);
+      } else {
+        doc.fontSize(9).fillColor('#000').text('Speedway Solutions Ltd.', left, topBlockY);
+        doc.text('Phone: +880 1775 274090');
+        doc.text('Website: https://speedway-solutions.com/');
+      }
 
       // Bill To box (right)
       doc.save();
       doc.rect(rightBlockX - 6, topBlockY - 6, rightBlockWidth + 12, 70).fillOpacity(0.06).fill('#f2f2f2');
       doc.restore();
       doc.fillColor('#000').fontSize(10).text('Bill To', rightBlockX, topBlockY);
-      const billText = (inv.bill_to || '').replace(/\r/g, '').split('\n').join('\n');
+      const billText = ((inv.billing_to && (inv.billing_to.address || inv.billing_to.name)) || '').toString().replace(/\r/g, '').split('\n').join('\n');
       doc.fontSize(9).text(billText || '-', rightBlockX, topBlockY + 16, { width: rightBlockWidth });
 
       // --- Items table ---

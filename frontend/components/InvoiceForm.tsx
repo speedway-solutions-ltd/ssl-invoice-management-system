@@ -28,7 +28,18 @@ export default function InvoiceForm({ id }: { id?: string }) {
         setInvoice(data);
       })();
     }
+    // fetch companies for selects
+    (async () => {
+      try {
+        const list = await (await import('../lib/api-client')).companiesApi.list();
+        setCompanies(list || []);
+      } catch (e) {
+        // ignore
+      }
+    })();
   }, [id]);
+
+  const [companies, setCompanies] = useState<any[]>([]);
 
   function setField(field: string, value: any) {
     // clamp/validate percent fields
@@ -157,13 +168,35 @@ export default function InvoiceForm({ id }: { id?: string }) {
         </div>
 
         <div className={`${styles.formGroup} ${styles.formGridFull}`}>
-          <label className={styles.formLabel}>Bill To</label>
-          <textarea
-            className={styles.formTextarea}
-            value={invoice.bill_to || ''}
-            onChange={(e) => setField('bill_to', e.target.value)}
-            placeholder="Customer name and address"
-          />
+          <label className={styles.formLabel}>Billing From</label>
+          <select
+            className={styles.formInput}
+            value={invoice.billing_from_id || (invoice.billing_from && invoice.billing_from.id) || ''}
+            onChange={(e) => setField('billing_from_id', e.target.value ? Number(e.target.value) : undefined)}
+          >
+            <option value="">-- Select Company --</option>
+            {companies
+              .filter((c) => c.type === 'own')
+              .map((c) => (
+                <option key={c.id} value={c.id} disabled={c.id === invoice.billing_to_id}>{c.name}</option>
+              ))}
+          </select>
+        </div>
+
+        <div className={`${styles.formGroup} ${styles.formGridFull}`}>
+          <label className={styles.formLabel}>Billing To</label>
+          <select
+            className={styles.formInput}
+            value={invoice.billing_to_id || (invoice.billing_to && invoice.billing_to.id) || ''}
+            onChange={(e) => setField('billing_to_id', e.target.value ? Number(e.target.value) : undefined)}
+          >
+            <option value="">-- Select Company --</option>
+            {companies
+              .filter((c) => c.type === 'client')
+              .map((c) => (
+                <option key={c.id} value={c.id} disabled={c.id === invoice.billing_from_id}>{c.name}</option>
+              ))}
+          </select>
         </div>
 
       </div>

@@ -29,6 +29,16 @@ export default function Sidebar() {
             📄 Invoices
           </Link>
         </li>
+        <li className={styles.navItem}>
+          <Link
+            href="/admin/companies"
+            className={`${styles.navItemLink} ${
+              router.pathname.includes('/companies') ? styles.active : ''
+            }`}
+          >
+            🏢 Companies
+          </Link>
+        </li>
       </ul>
     </aside>
   );

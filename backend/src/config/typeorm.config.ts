@@ -7,6 +7,7 @@ import { ExperienceTier } from '../entities/ExperienceTier.entity';
 import { ResourcePrice } from '../entities/ResourcePrice.entity';
 import { ProjectService } from '../entities/ProjectService.entity';
 import { ActuarialPackage } from '../entities/ActuarialPackage.entity';
+import { Company } from '../company/company.entity';
 dotenv.config();
 
 // Explicitly list entity classes only (not enums)
@@ -18,6 +19,7 @@ const entityList = [
   ResourcePrice,
   ProjectService,
   ActuarialPackage,
+  Company,
 ];
 
 export const typeOrmConfig: TypeOrmModuleOptions = {
