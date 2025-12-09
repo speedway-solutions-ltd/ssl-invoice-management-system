@@ -31,13 +31,26 @@ export default function InvoiceForm({ id }: { id?: string }) {
   }, [id]);
 
   function setField(field: string, value: any) {
+    // clamp/validate percent fields
+    if (field === 'tax_percent') {
+      const v = Number(value || 0);
+      const clamped = Math.max(0, Math.min(100, v));
+      setInvoice((prev: any) => ({ ...prev, [field]: clamped }));
+      return;
+    }
+    if (field === 'discount_value' && (invoice.discount_type || 'percent') === 'percent') {
+      const v = Number(value || 0);
+      const clamped = Math.max(0, Math.min(100, v));
+      setInvoice((prev: any) => ({ ...prev, [field]: clamped }));
+      return;
+    }
     setInvoice((prev: any) => ({ ...prev, [field]: value }));
   }
 
   function addItem() {
     setInvoice((prev: any) => ({
       ...prev,
-      items: [...(prev.items || []), { item_code: '', description: '', qty: 1, unit_price: 0, total: 0 }],
+      items: [...(prev.items || []), { item_code: '', description: '', qty: 1, unit_price: 0, discount_type: 'percent', discount_value: 0, total: 0 }],
     }));
   }
 
@@ -47,8 +60,28 @@ export default function InvoiceForm({ id }: { id?: string }) {
     // auto compute line total when qty or unit_price change
     const qty = Number(items[idx].qty || 0);
     const unit = Number(items[idx].unit_price || 0);
-    if (field === 'qty' || field === 'unit_price') {
-      items[idx].total = Number((qty * unit).toFixed(2));
+    const discType = items[idx].discount_type || 'percent';
+    let discValue = Number(items[idx].discount_value || 0);
+    // clamp percent-type discounts to 0-100
+    if (field === 'discount_value' && discType === 'percent') {
+      discValue = Math.max(0, Math.min(100, discValue));
+      items[idx].discount_value = discValue;
+    }
+    // if discount_type changed from fixed->percent and value >100, clamp
+    if (field === 'discount_type') {
+      if (items[idx].discount_type === 'percent') {
+        const v = Number(items[idx].discount_value || 0);
+        items[idx].discount_value = Math.max(0, Math.min(100, v));
+      }
+    }
+    // if any of qty/unit/discount changed, recompute item total
+    if (['qty', 'unit_price', 'discount_value', 'discount_type'].includes(field)) {
+      const gross = qty * unit;
+      let disc = 0;
+      if (discType === 'percent') disc = gross * (discValue / 100);
+      else disc = discValue;
+      const lineTotal = Math.max(0, gross - disc);
+      items[idx].total = Number(lineTotal.toFixed(2));
     }
     setInvoice((prev: any) => ({ ...prev, items }));
   }
@@ -133,15 +166,6 @@ export default function InvoiceForm({ id }: { id?: string }) {
           />
         </div>
 
-        <div className={`${styles.formGroup} ${styles.formGridFull}`}>
-          <label className={styles.formLabel}>Notes</label>
-          <textarea
-            className={styles.formTextarea}
-            value={invoice.notes || ''}
-            onChange={(e) => setField('notes', e.target.value)}
-            placeholder="Additional notes"
-          />
-        </div>
       </div>
 
       {/* Items Section */}
@@ -155,6 +179,7 @@ export default function InvoiceForm({ id }: { id?: string }) {
                 <th className={styles.itemsTableHeader}>Description</th>
                 <th className={styles.itemsTableHeader}>Qty</th>
                 <th className={styles.itemsTableHeader}>Unit Price</th>
+                <th className={styles.itemsTableHeader}>Discount</th>
                 <th className={styles.itemsTableHeader}>Total</th>
                 <th className={styles.itemsTableHeader}></th>
               </tr>
@@ -199,6 +224,21 @@ export default function InvoiceForm({ id }: { id?: string }) {
                       min="0"
                     />
                   </td>
+                  <td className={styles.itemsTableCell} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select value={item.discount_type || 'percent'} onChange={(e) => updateItem(idx, 'discount_type', e.target.value)}>
+                      <option value="percent">% Off</option>
+                      <option value="fixed">$ Off</option>
+                    </select>
+                    <input
+                      type="number"
+                      className={styles.itemInput}
+                      value={item.discount_value || 0}
+                      onChange={(e) => updateItem(idx, 'discount_value', Number(e.target.value))}
+                      step="0.01"
+                      min="0"
+                      style={{ width: 80 }}
+                    />
+                  </td>
                   <td className={styles.itemsTableCell}>
                     <div style={{ fontWeight: 600 }}>${Number(item.total || 0).toFixed(2)}</div>
                   </td>
@@ -221,72 +261,117 @@ export default function InvoiceForm({ id }: { id?: string }) {
         </button>
       </div>
 
-      {/* Form Summary Fields */}
+      {/* Form Summary Fields (ordered & right-aligned): Subtotal, Discount, Tax, Other, Total */}
       <div className={styles.formGrid}>
+        {/* <div className={styles.summarySection}> */}
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Subtotal</label>
-          <input
-            type="number"
-            className={styles.formInput}
-            value={invoice.subtotal || 0}
-            onChange={(e) => setField('subtotal', Number(e.target.value))}
-            step="0.01"
-            min="0"
-          />
+          <div className={`${styles.formGroup} ${styles.formGridFull}`}>
+            <label className={styles.formLabel}>Notes</label>
+            <textarea
+              className={styles.formTextarea}
+              value={invoice.notes || ''}
+              onChange={(e) => setField('notes', e.target.value)}
+              placeholder="Additional notes"
+            />
+          </div>
         </div>
-
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Tax</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+
+          {/* Subtotal */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <label className={styles.formLabel} style={{ textAlign: 'left' }}>Subtotal</label>
             <input
               type="number"
               className={styles.formInput}
-              value={invoice.tax_percent || 0}
-              onChange={(e) => setField('tax_percent', Number(e.target.value))}
+              value={invoice.subtotal || 0}
+              onChange={(e) => setField('subtotal', Number(e.target.value))}
               step="0.01"
               min="0"
-              placeholder="Tax %"
+              style={{ textAlign: 'right' }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--slate-600)' }}>${Number(invoice.tax || 0).toFixed(2)}</div>
           </div>
+
+          {/* Discount */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <label className={styles.formLabel} style={{ textAlign: 'left' }}>Discount</label>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={invoice.discount_type || 'percent'}
+                onChange={(e) => setField('discount_type', e.target.value)}
+              >
+                <option value="percent">Percent (%)</option>
+                <option value="fixed">Fixed ($)</option>
+              </select>
+
+              <input
+                type="number"
+                className={styles.formInput}
+                value={invoice.discount_value || 0}
+                onChange={(e) => setField('discount_value', Number(e.target.value))}
+                step="0.01"
+                min="0"
+                style={{ textAlign: 'right' }}
+              />
+            </div>
+          </div>
+
+          {/* Tax */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <label className={styles.formLabel} style={{ textAlign: 'left' }}>Tax %</label>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="number"
+                className={styles.formInput}
+                value={invoice.tax_percent || 0}
+                onChange={(e) => setField('tax_percent', Number(e.target.value))}
+                step="0.01"
+                min="0"
+                placeholder="Tax %"
+                style={{ textAlign: 'right' }}
+              />
+              {/* <div style={{ color: 'var(--slate-600)', minWidth: 80, textAlign: 'right' }}>
+                ${Number(invoice.tax || 0).toFixed(2)}
+              </div> */}
+            </div>
+          </div>
+
+          {/* Other */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <label className={styles.formLabel} style={{ textAlign: 'left' }}>Other</label>
+            <input
+              type="number"
+              className={styles.formInput}
+              value={invoice.other || 0}
+              onChange={(e) => setField('other', Number(e.target.value))}
+              step="0.01"
+              min="0"
+              style={{ textAlign: 'right' }}
+            />
+          </div>
+
+          {/* Total */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <label className={styles.formLabel} style={{ textAlign: 'left', fontWeight: 600 }}>Total</label>
+            <input
+              type="number"
+              className={styles.formInput}
+              value={invoice.total || 0}
+              readOnly
+              step="0.01"
+              min="0"
+              style={{ textAlign: 'right' }}
+            />
+          </div>
+
         </div>
 
-        <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Other</label>
-          <input
-            type="number"
-            className={styles.formInput}
-            value={invoice.other || 0}
-            onChange={(e) => setField('other', Number(e.target.value))}
-            step="0.01"
-            min="0"
-          />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Total</label>
-          <input
-            type="number"
-            className={styles.formInput}
-            value={invoice.total || 0}
-            readOnly
-            step="0.01"
-            min="0"
-          />
-        </div>
       </div>
 
-      {/* Discount Section */}
-      <div style={{ marginTop: 12, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label className={styles.formLabel}>Discount</label>
-          <select value={invoice.discount_type || 'percent'} onChange={(e) => setField('discount_type', e.target.value)}>
-            <option value="percent">Percent (%)</option>
-            <option value="fixed">Fixed ($)</option>
-          </select>
-          <input type="number" className={styles.formInput} value={invoice.discount_value || 0} onChange={(e) => setField('discount_value', Number(e.target.value))} step="0.01" min="0" />
-        </div>
-      </div>
+      {/* --------------------------- */}
+
+      {/* --------------------------- */}
 
       {/* Summary Section */}
       <div className={styles.summarySection}>

@@ -14,6 +14,10 @@ export class InvoiceItem {
   qty: number;
   @Column({ type: 'numeric', nullable: true })
   unit_price: number;
+  @Column({ type: 'varchar', length: 16, nullable: true, default: 'percent' })
+  discount_type: string;
+  @Column({ type: 'numeric', nullable: true, default: 0 })
+  discount_value: number;
   @Column({ type: 'numeric', nullable: true })
   total: number;
 }

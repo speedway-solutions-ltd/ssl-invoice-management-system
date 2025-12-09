@@ -22,6 +22,16 @@ export class InvoiceItemDto {
   @IsNumber()
   unit_price?: number;
 
+  @ApiPropertyOptional({ description: 'Per-line discount type: percent or fixed' })
+  @IsOptional()
+  @IsString()
+  discount_type?: string;
+
+  @ApiPropertyOptional({ description: 'Per-line discount value (percent or fixed amount)' })
+  @IsOptional()
+  @IsNumber()
+  discount_value?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

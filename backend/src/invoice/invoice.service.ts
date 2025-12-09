@@ -12,8 +12,42 @@ export class InvoiceService {
   constructor(
     @InjectRepository(Invoice) private invoiceRepo: Repository<Invoice>
   ) { }
+  private computeInvoiceTotals(inv: any) {
+    const items = Array.isArray(inv.items) ? inv.items : [];
+    // compute item totals with per-item discounts
+    for (const it of items) {
+      const qty = Number(it.qty || 0);
+      const unit = Number(it.unit_price || 0);
+      const gross = qty * unit;
+      const discType = (it.discount_type || 'percent').toString();
+      const discValue = Number(it.discount_value || 0);
+      let disc = 0;
+      if (discType === 'percent') disc = gross * (discValue / 100);
+      else disc = discValue;
+      it.total = Number(Math.max(0, gross - disc).toFixed(2));
+    }
+
+    const subtotal = items.reduce((s: number, it: any) => s + (Number(it.total) || 0), 0);
+    inv.subtotal = Number(subtotal.toFixed(2));
+
+    const discountType = (inv.discount_type || 'percent').toString();
+    const discountValue = Number(inv.discount_value || 0);
+    let discountAmount = 0;
+    if (discountType === 'percent') discountAmount = Number((subtotal * (discountValue / 100)).toFixed(2));
+    else discountAmount = Number(discountValue.toFixed ? discountValue.toFixed(2) : discountValue) || discountValue;
+
+    const taxableBase = Math.max(0, subtotal - discountAmount);
+    const taxPercent = Number(inv.tax_percent || 0);
+    const taxAmount = Number(((taxableBase * taxPercent) / 100).toFixed(2));
+    const other = inv.other !== undefined && inv.other !== null ? Number(inv.other) : 0;
+    const total = Number((taxableBase + taxAmount + other).toFixed(2));
+
+    inv.tax = taxAmount;
+    inv.total = total;
+  }
   create(dto: CreateInvoiceDto) {
     const inv = this.invoiceRepo.create(dto as any);
+    this.computeInvoiceTotals(inv);
     return this.invoiceRepo.save(inv);
   }
 
@@ -28,8 +62,10 @@ export class InvoiceService {
   }
 
   async update(id: number, dto: UpdateInvoiceDto) {
-    await this.invoiceRepo.update(id, dto as any);
-    return this.findOne(id);
+    const existing = await this.findOne(id);
+    const merged = this.invoiceRepo.merge(existing as any, dto as any);
+    this.computeInvoiceTotals(merged);
+    return this.invoiceRepo.save(merged as any);
   }
 
   async remove(id: number) {
@@ -115,9 +151,10 @@ export class InvoiceService {
       // Define column widths (item | desc | qty | unit | total)
       const colItemW = 90;
       const colQtyW = 50;
-      const colUnitW = 80;
-      const colTotalW = 80;
-      const colDescW = tableRight - tableLeft - (colItemW + colQtyW + colUnitW + colTotalW) - 12;
+      const colUnitW = 70;
+      const colDiscW = 60;
+      const colTotalW = 70;
+      const colDescW = tableRight - tableLeft - (colItemW + colQtyW + colUnitW + colDiscW + colTotalW) - 12;
 
       // Draw table header and rows with auto-height per item (wrap descriptions)
       const headerHeight = 22;
@@ -132,6 +169,7 @@ export class InvoiceService {
         doc.text('DESCRIPTION', tableLeft + colItemW + 12, atY);
         doc.text('QTY', tableLeft + colItemW + 12 + colDescW + 6, atY);
         doc.text('UNIT PRICE', tableLeft + colItemW + 12 + colDescW + 6 + colQtyW + 6, atY);
+        doc.text('DISCOUNT', tableLeft + colItemW + 12 + colDescW + 6 + colQtyW + 6 + colUnitW + 6, atY);
         doc.text('TOTAL', tableRight - colTotalW + 6, atY);
         return atY + headerHeight + headerGap;
       };
@@ -159,9 +197,11 @@ export class InvoiceService {
           const itemCodeHeight = doc.heightOfString((it.item_code || '-').toString(), { width: colItemW - 10 });
           const qtyHeight = doc.heightOfString(String(it.qty ?? '-'), { width: colQtyW });
           const unitHeight = doc.heightOfString(fmt(it.unit_price), { width: colUnitW });
+          const discLabel = it.discount_type === 'percent' ? `${Number(it.discount_value || 0)}%` : `$${fmt(it.discount_value)}`;
+          const discHeight = doc.heightOfString(discLabel, { width: colDiscW });
           const totalHeight = doc.heightOfString(fmt(it.total), { width: colTotalW - 10 });
 
-          const contentHeight = Math.max(descHeight, itemCodeHeight, qtyHeight, unitHeight, totalHeight);
+          const contentHeight = Math.max(descHeight, itemCodeHeight, qtyHeight, unitHeight, discHeight, totalHeight);
           const rowHeight = Math.max(minRowHeight, contentHeight + 6);
 
           ensureNewPage(rowHeight + 4);
@@ -183,6 +223,11 @@ export class InvoiceService {
           // unit price right aligned
           const unitX = qtyX + colQtyW + 6;
           doc.text(fmt(it.unit_price), unitX, y, { width: colUnitW, align: 'right' });
+
+          // discount right aligned (show percent or fixed)
+          const discX = unitX + colUnitW + 6;
+          const discDisplay = (it && it.discount_type === 'percent') ? `-${Number(it.discount_value || 0)}%` : (it && Number(it.discount_value) ? `-$${fmt(it.discount_value)}` : '-');
+          doc.text(discDisplay, discX, y, { width: colDiscW, align: 'right' });
 
           // total right aligned
           doc.text(fmt(it.total), tableRight - colTotalW + 6, y, { width: colTotalW - 10, align: 'right' });
