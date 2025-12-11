@@ -1,14 +1,72 @@
-version: '3.8'
+version: "3.9"
+
 services:
   db:
-    image: postgres:15
+    image: postgres:15-alpine
+    restart: always
     environment:
-      POSTGRES_DB: speedway
-      POSTGRES_USER: speedway
-      POSTGRES_PASSWORD: speedway
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ssl_invoice_db}
     volumes:
       - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ssl_invoice_db}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "22"
+    image: backend:local
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${BACKEND_PORT:-4001}
+      DB_HOST: ssl-invoice-management-system-db-1
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ssl_invoice_db
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@ssl-invoice-management-system-db-1:5432/${POSTGRES_DB:-ssl_invoice_db}}
+      # add other env vars here or mount .env
+    ports:
+      - "${BACKEND_PORT:-4001}:4001"
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "22"
+    image: frontend:local
+    restart: on-failure
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${FRONTEND_PORT:-3002}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-4001}}
+    ports:
+      - "${FRONTEND_PORT:-3002}:3002"
+    networks:
+      - app-network
+
 volumes:
   db-data:
+
+
+networks:
+  app-network:
+    driver: bridge

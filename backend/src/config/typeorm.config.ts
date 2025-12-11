@@ -10,6 +10,7 @@ import { ActuarialPackage } from '../entities/ActuarialPackage.entity';
 import { Company } from '../company/company.entity';
 dotenv.config();
 
+
 // Explicitly list entity classes only (not enums)
 const entityList = [
   Invoice,
@@ -32,6 +33,6 @@ export const typeOrmConfig: TypeOrmModuleOptions = {
   // entities: ['dist/**/*.entity{.ts,.js}'],
   entities: entityList,
   migrations: ['dist/migrations/*{.ts,.js}'],
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: true, // process.env.NODE_ENV !== 'production',
   logging: process.env.NODE_ENV == 'production',
 };
