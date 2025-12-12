@@ -5,9 +5,11 @@ WORKDIR /app
 
 RUN apk add --no-cache python3 make g++ git
 
+# Install dependencies (copy package files first for caching)
 COPY package*.json pnpm-lock.yaml* ./
 RUN npm ci --ignore-scripts
 
+# Copy source and build
 COPY . .
 RUN npm run build
 
@@ -16,25 +18,14 @@ ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 
-# Copy build artifacts as root (so COPY can write)
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/next.config.js ./
+# Copy entire app directory from builder (this includes .next, public, node_modules, package.json, etc.)
+COPY --from=builder /app ./ 
 
-# Create non-root user and set ownership, then switch
+# create non-root user and set ownership, then switch
 RUN addgroup -S app && adduser -S -G app app \
     && chown -R app:app /app
 
 USER app
-
-# Copy output of build
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/next.config.js ./
 
 ENV NODE_ENV=production
 ENV PORT=3002
