@@ -40,6 +40,9 @@ jobs:
 
             echo "🧹 Cleaning old builds..."
 
-            docker compose up -d
+            # docker compose up -d
+            docker compose build --no-cache
+            docker compose down
+            docker compose up -d --remove-orphans
 
             echo "✅ Deployment finished successfully!"
