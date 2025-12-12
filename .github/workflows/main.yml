@@ -28,18 +28,16 @@ jobs:
             # Navigate to project root
             cd /var/www/ssl-inhouse/ssl-invoice-management-system || exit 1
 
-            # echo "🔄 Updating repository..."
-            # if [ ! -d ".git" ]; then
-            #   git clone git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git .
-            # fi
-            # git remote set-url origin git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git
-            # git fetch origin main
-            # git checkout main
-            # git reset --hard origin/main
-            # git clean -df
-            git pull origin main
+            echo "🔄 Updating repository..."
+            if [ ! -d ".git" ]; then
+              git clone git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git .
+            fi
+            git remote set-url origin git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+            git clean -df
 
-            echo "📦 Building Docker containers..."
             echo "🧹 Cleaning old builds..."
 
             docker compose up -d
