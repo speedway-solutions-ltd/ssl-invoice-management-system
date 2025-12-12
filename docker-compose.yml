@@ -60,6 +60,8 @@ services:
       NEXT_PUBLIC_API_URL: http://91.99.144.105:4001/api/v1
     ports:
       - "${FRONTEND_PORT:-3002}:3002"
+    env_file:
+      - .env 
     networks:
       - app-network
 
