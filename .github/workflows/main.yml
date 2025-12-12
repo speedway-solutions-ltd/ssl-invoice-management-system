@@ -1,0 +1,45 @@
+name: Deploy via SSH
+
+on:
+  push:
+    branches: [ main ]   # Trigger on push to main branch
+  workflow_dispatch:     # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Hetzner via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HETZNER_SSH_HOST }}
+          username: ${{ secrets.HETZNER_SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_PK }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            echo "🚀 Starting deployment on server..."
+
+            # Navigate to project root
+            cd /var/www/ssl-inhouse || exit 1
+
+            echo "🔄 Updating repository..."
+            if [ ! -d ".git" ]; then
+              git clone git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git .
+            fi
+            git remote set-url origin git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+            git clean -df
+
+            echo "🧹 Cleaning old builds..."
+
+            docker-compose up -d
+
+            echo "✅ Deployment finished successfully!"
