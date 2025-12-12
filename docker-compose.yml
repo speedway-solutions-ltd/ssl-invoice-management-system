@@ -57,7 +57,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${FRONTEND_PORT:-3002}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_PORT:-4001}}
+      NEXT_PUBLIC_API_URL: http://91.99.144.105:4001/api/v1
     ports:
       - "${FRONTEND_PORT:-3002}:3002"
     networks:
