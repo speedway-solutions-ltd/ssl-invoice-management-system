@@ -1,45 +1,73 @@
-name: Deploy via SSH
+name: Deploy via SSH (rsync push)
 
 on:
   push:
-    branches: [ main ]   # Trigger on push to main branch
-  workflow_dispatch:     # Allow manual triggering 
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Hetzner via SSH
+      - name: Prepare SSH key
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_SSH_PK }}
+        run: |
+          set -euo pipefail
+          printf "%s\n" "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          echo "Saved private key to /tmp/deploy_key (permissions 600)"
+          ssh-keyscan -p ${PORT:-22} -H ${{ secrets.HETZNER_SSH_HOST }} >> /tmp/known_hosts || true
+          echo "Added server to temporary known_hosts (/tmp/known_hosts)"
+
+      - name: Rsync to server
+        env:
+          PORT: ${{ secrets.HETZNER_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          echo "Starting rsync -> ${HOST:-$GITHUB_REPOSITORY_OWNER}"
+          rsync -avz --delete \
+            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -p ${PORT:-22}" \
+            ./ ${{ secrets.HETZNER_SSH_USER }}@${{ secrets.HETZNER_SSH_HOST }}:/var/www/ssl-inhouse/
+          echo "Rsync finished."
+
+      - name: Run remote deploy commands
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.HETZNER_SSH_HOST }}
           username: ${{ secrets.HETZNER_SSH_USER }}
           key: ${{ secrets.HETZNER_SSH_PK }}
-          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
-          timeout: 60s
-          command_timeout: 10m
+          port: ${{ secrets.HETZNER_SSH_PORT }}
           script: |
-            echo "🚀 Starting deployment on server..."
+            set -euxo pipefail
+            echo "Whoami: $(whoami)"
+            echo "ls -la /var/www/ssl-inhouse"
+            ls -la /var/www/ssl-inhouse || true
 
-            # Navigate to project root
-            cd /var/www/ssl-inhouse || exit 1
-
-            echo "🔄 Updating repository..."
-            if [ ! -d ".git" ]; then
-              git clone git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git .
+            # If you use docker compose v2 (plugin), use: docker compose up -d
+            if command -v docker >/dev/null 2>&1; then
+              echo "Docker available: $(docker --version)"
+            else
+              echo "ERROR: docker not found"
+              exit 1
             fi
-            git remote set-url origin git@github.com:speedway-solutions-ltd/ssl-invoice-management-system.git
-            git fetch origin main
-            git checkout main
-            git reset --hard origin/main
-            git clean -df
 
-            echo "🧹 Cleaning old builds..."
+            if docker compose version >/dev/null 2>&1; then
+              echo "Using 'docker compose' (v2 plugin)"
+              docker compose up -d
+            elif command -v docker-compose >/dev/null 2>&1; then
+              echo "Using legacy docker-compose"
+              docker-compose up -d
+            else
+              echo "docker compose not installed; attempting install (requires sudo)"
+              # install docker compose plugin (non-root may fail). Adjust or skip if not desirable.
+              mkdir -p ~/.docker/cli-plugins
+              curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o ~/.docker/cli-plugins/docker-compose
+              chmod +x ~/.docker/cli-plugins/docker-compose
+              docker compose up -d
+            fi
 
-            docker-compose up -d
-
-            echo "✅ Deployment finished successfully!"
+            echo "Deployment finished successfully!"
