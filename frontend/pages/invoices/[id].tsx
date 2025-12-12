@@ -2,11 +2,12 @@ import axios from 'axios';
 import useSWR from 'swr';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { baseUrl } from '../../config/base-url';
 const fetcher = (url: string) => axios.get(url).then(r=>r.data);
 export default function InvoicePage() {
   const router = useRouter();
   const { id } = router.query;
-  const { data, mutate } = useSWR(id ? `${process.env.NEXT_PUBLIC_API_URL}/api/v1/invoices/${id}` : null, fetcher);
+  const { data, mutate } = useSWR(id ? `${baseUrl}/api/v1/invoices/${id}` : null, fetcher);
   if (!data) return <div>Loading...</div>;
   return (
     <div style={{ padding: 20 }}>
@@ -23,7 +24,7 @@ export default function InvoicePage() {
       </div>
       <div><strong>Total:</strong> {data.total}</div>
       <div style={{ marginTop: 10 }}>
-        <Link href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer"><button>Download PDF</button></Link>
+        <Link href={`${baseUrl}/api/v1/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer"><button>Download PDF</button></Link>
       </div>
     </div>
   );

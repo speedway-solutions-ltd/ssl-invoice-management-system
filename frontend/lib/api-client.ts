@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { baseUrl } from '../config/base-url';
 
-const client = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL });
+const client = axios.create({ baseURL: baseUrl });
 
 export const invoicesApi = {
     list: () => client.get('/invoices').then(r => r.data),
@@ -8,7 +9,7 @@ export const invoicesApi = {
     create: (payload: any) => client.post('/invoices', payload).then(r => r.data),
     update: (id: number | string, payload: any) => client.put(`/invoices/${id}`, payload).then(r => r.data),
     remove: (id: number | string) => client.delete(`/invoices/${id}`).then(r => r.data),
-    pdfUrl: (id: number | string) => `${process.env.NEXT_PUBLIC_API_URL}/invoices/${id}/pdf`,
+    pdfUrl: (id: number | string) => `${baseUrl}/invoices/${id}/pdf`,
 };
 
 export const companiesApi = {
