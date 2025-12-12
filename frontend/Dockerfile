@@ -3,27 +3,30 @@ ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 
-# Install build tools
 RUN apk add --no-cache python3 make g++ git
 
-# Copy package manifests
 COPY package*.json pnpm-lock.yaml* ./
-
 RUN npm ci --ignore-scripts
 
-# Copy source
 COPY . .
-
-# Build Next.js app
-# For apps using next@13+ with app dir, ensure proper build config
 RUN npm run build
 
-# Stage 2 — runner
+# Stage 2 — runtime
+ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -S app && adduser -S -G app app
+# Copy build artifacts as root (so COPY can write)
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/next.config.js ./
+
+# Create non-root user and set ownership, then switch
+RUN addgroup -S app && adduser -S -G app app \
+    && chown -R app:app /app
+
 USER app
 
 # Copy output of build
