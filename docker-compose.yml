@@ -61,7 +61,7 @@ services:
     ports:
       - "${FRONTEND_PORT:-3002}:3002"
     env_file:
-      - .env 
+      - ./frontend/.env.production 
     networks:
       - app-network
 
